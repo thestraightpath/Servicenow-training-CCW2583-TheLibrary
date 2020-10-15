@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_security_acl_role">
+    <sys_security_acl_role action="INSERT_OR_UPDATE">
+        <sys_class_name>sys_security_acl_role</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2020-10-13 16:11:08</sys_created_on>
+        <sys_id>d2c6f3862fb31010d2d1d99df699b69e</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>x_35505_thelibrar_lookup_table.itil</sys_name>
+        <sys_package display_value="TheLibrary" source="x_35505_thelibrar">c4a03b822fb31010d2d1d99df699b603</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="TheLibrary">c4a03b822fb31010d2d1d99df699b603</sys_scope>
+        <sys_security_acl display_value="x_35505_thelibrar_lookup_table">56c6f3862fb31010d2d1d99df699b69b</sys_security_acl>
+        <sys_update_name>sys_security_acl_role_d2c6f3862fb31010d2d1d99df699b69e</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2020-10-13 16:11:08</sys_updated_on>
+        <sys_user_role display_value="itil" name="itil">282bf1fac6112285017366cb5f867469</sys_user_role>
+        <transaction_id/>
+    </sys_security_acl_role>
+</record_update>

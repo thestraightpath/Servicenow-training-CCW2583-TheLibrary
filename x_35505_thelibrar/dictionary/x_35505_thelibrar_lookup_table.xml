@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?><database>
+    <element label="Lookup Table" max_length="40" name="x_35505_thelibrar_lookup_table" type="collection">
+        <element label="Address" max_length="1000" name="address" type="string"/>
+        <element display="true" label="Name" max_length="40" name="name" type="string"/>
+    </element>
+</database>

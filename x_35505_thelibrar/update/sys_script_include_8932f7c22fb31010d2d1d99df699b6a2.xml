@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_35505_thelibrar.TheLibrary</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>TheLibrary</name>
+        <script><![CDATA[//*****Start of Script*****
+
+const DAY = 24 * 60 * 60 * 1000;
+
+var location = 'TheLibrary';
+var TheLibrary = Class.create();
+
+// for debugging - return a record from the given table
+// reference: https://community.servicenow.com/community?id=community_blog&sys_id=9bcda2e9dbd0dbc01dcaf3231f9619e5
+// reference: https://developer.servicenow.com/connect.do#!/event/creatorcon18/CCW0685/creatorcon_18_CCW0685_challenge
+TheLibrary.currentFactory = function(tableName, order, encodedQuery) {
+    return this.listFactory(tableName, 1, order, encodedQuery);
+};
+
+// reference: https://developer.servicenow.com/connect.do#!/event/creatorcon18/CCW0685/creatorcon_18_CCW0685_challenge
+TheLibrary.listFactory = function(tableName, limit, order, encodedQuery) {
+    var listRecords = new GlideRecord(tableName);
+
+    try {
+        if (!gs.nil(encodedQuery)) {
+            listRecords.addEncodedQuery(encodedQuery);
+        }
+        if (!gs.nil(order)) {
+            if (order.type == 'descending') {
+                listRecords.orderByDesc(order.field);
+            } else {
+                listRecords.orderBy(order.field);
+            }
+        }
+
+        listRecords.setLimit(limit);
+        listRecords.query();
+
+        if (listRecords.hasNext() && limit == 1) {
+            listRecords.next();
+        }
+    } catch (err) {
+        throw err;
+    }
+
+    return listRecords;
+};
+
+// Borrowed from global.JSUtil, and worked-over so that it will work in scoped environment
+// reference: https://community.servicenow.com/community?id=community_blog&sys_id=649d6a69dbd0dbc01dcaf3231f9619a9
+TheLibrary.nil = function(item) {
+    var nilCheck = true;
+
+    try {
+        nilCheck = !item ||
+            (item == null) ||
+            (typeof item == 'undefined') ||
+            ('' == '' + item) ||
+            (item == 'undefined');
+    } catch (err) {
+        this.error('---> [{1}-{2}] \n{0}',
+            [err, new GlideDateTime().getNumericValue()], 'SI:' + this.type + '.nil');
+    }
+
+    return nilCheck;
+};
+
+// Borrowed from global.JSUtil, and worked-over so that it will work in scoped environment
+TheLibrary.notNil = function(item) {
+    return !this.nil(item);
+};
+
+// Write into the system log with millisecond and location information
+// reference: https://community.servicenow.com/community?id=community_blog&sys_id=1d2e666ddbd0dbc01dcaf3231f961961
+// reference: https://community.servicenow.com/community?id=community_blog&sys_id=e3cce265dbd0dbc01dcaf3231f961957
+// reference: https://community.servicenow.com/community?id=community_blog&sys_id=107ceea1dbd0dbc01dcaf3231f9619be
+// usage: utils.info('This is a test! {0}',['hi there'], 'FS: tester');
+TheLibrary.parseAndWriteLog = function(logJSON) {
+    this[logJSON.type](logJSON.message, logJSON.valueList, logJSON.location);
+
+    // alternate call:
+    // this.log(logJSON.message, logJSON.valueList, logJSON.location, logJSON.type);
+};
+TheLibrary.info = function(message, messageArgs, location) {
+    this.log(message, messageArgs, location, 'info');
+};
+TheLibrary.error = function(message, messageArgs, location) {
+    this.log(message, messageArgs, location, 'error');
+};
+TheLibrary.warn = function(message, messageArgs, location) {
+    this.log(message, messageArgs, location, 'warn');
+};
+TheLibrary.log = function(message, messageArgs, location, messageType) {
+    var debug = gs.getProperty('x_scn_TheLibrary.debug', false);
+
+    // always allow if an error is fed in
+    if (debug || messageType == 'error') {
+        if (!message || !location) {
+            throw 'ERROR: no message or location given - ACNFoundation.log';
+        }
+
+        if (!messageType) {
+            messageType = 'info';
+        }
+
+        // only message is present
+        if (!messageArgs) {
+            messageArgs = [];
+        }
+
+        // beef up the message with millisecond and location
+        message = '---> [' + new GlideDateTime().getNumericValue() + '-' + location + ']\n' + message;
+
+        switch (true) {
+            case messageType == 'info':
+                gs.info(message, messageArgs);
+                break;
+            case messageType == 'debug':
+                gs.debug(message, messageArgs);
+                break;
+            case messageType == 'warn':
+                gs.warn(message, messageArgs);
+                break;
+            case messageType == 'error':
+                gs.error(message, messageArgs);
+                break;
+        }
+    }
+};
+
+// reset the designated application's repository url
+// reference: https://community.servicenow.com/community?id=community_blog&sys_id=d2cc6265dbd0dbc01dcaf3231f9619ee
+TheLibrary.clear_repository_url = function(applicationReference) {
+    // gs.info('---> applicationReference:' + applicationReference);
+    var repository_configuration = new GlideRecord('sys_repo_config');
+    if (repository_configuration.get('sys_app', applicationReference)) {
+        // gs.info('---> ' + repository_configuration.getValue('sys_app'));
+        // repository_configuration.deleteRecord();
+        repository_configuration.active = false;
+        repository_configuration.update();
+    }
+};
+
+// ------- CHALLENGE LIBRARY ----------
+
+// Dedup an Object Array - the .key field is the unique key being passed in associated to the object array
+// object.key = object.user_name + '|' + object.company_id;
+// reference: https://community.servicenow.com/community?id=community_blog&sys_id=d9cc2265dbd0dbc01dcaf3231f961961
+// reference: https://community.servicenow.com/community?id=community_article&sys_id=269cac79db2b574454250b55ca96190f
+// usage: deDupList.key will be some user defined combination of fields from the object
+TheLibrary.uniqueObjectList = function(objectArray) {
+    for (var i = 0; i < objectArray.length; i++) {
+        for (var j = i + 1; j < objectArray.length; j++) {
+            if (objectArray[j].key == objectArray[i].key) {
+                objectArray.splice(j, 1); // delete the duplicate
+                --j; // reduce the array length by one
+            }
+        }
+    }
+};
+
+// Use the builtin filter function to locate an array element by a value in one
+// of its object fields. BTW, when we finally move to ECMA 6 this becomes a one-liner!
+// reference: https://community.servicenow.com/community?id=community_article&sys_id=1c9aa1e9dbef534454250b55ca961983
+TheLibrary.findObject = function(source, targetList, field) {
+    return targetList.filter(function(obj) {
+        return obj[field] === source;
+    })[0];
+}
+
+// reference: https://community.servicenow.com/community?id=community_article&sys_id=82c9c1e4dbe393c08e7c2926ca96199e
+TheLibrary.timeDifferenceFromNow = function(dateTimeValue, tzOffSet) {
+    // apply timezone offset
+    var offSet = tzOffSet ? dateTimeValue.getTZOffset() : 0.0000;
+    // get the milliseconds value of the passed-in date/time
+    // assumption: if timezone offset chosen then this value is in local date/time
+    var dateTimeMilli = dateTimeValue.getNumericValue();
+    // get the current date/time value and convert it to milliseconds
+    var gtNowMilli = new GlideDateTime().getNumericValue() + offSet;
+    // now return the diff and pass it back converted to days
+    return (gtNowMilli - dateTimeMilli) / DAY;
+}
+
+// GlideRecord to Object Converter - takes a GlideRecord, converts it to an object array. Only returns display value of a reference field
+// Turn a single GlideRecord record into an object
+// reference: https://community.servicenow.com/community?id=community_blog&sys_id=b96c2ea1dbd0dbc01dcaf3231f9619b9
+// reference: https://community.servicenow.com/community?id=community_blog&sys_id=379c2225dbd0dbc01dcaf3231f961988
+TheLibrary.toObject = function(recordToPackage, getValue) {
+    var packageToSend = {};
+
+    if (gs.nil(getValue)) {
+        getValue = false;
+    }
+
+    for (var property in recordToPackage) {
+        try {
+            var internalType = this.getFieldInfo(recordToPackage[property]).internalType;
+
+            // I am not particularly fond of the com.glide.vars2.variable
+            // check as this is the type assigned to ALL variable types
+            // from current.variables.
+            if (getValue &&
+                (internalType == 'reference' ||
+                    internalType == 'com.glide.vars2.variable' ||
+                    internalType == 'password2'
+                )) {
+                packageToSend[property] = recordToPackage[property];
+            } else if (!gs.nil(recordToPackage[property])) {
+                if (internalType == 'password2') {
+                    packageToSend[property] = recordToPackage[property];
+                } else {
+                    packageToSend[property] = recordToPackage[property].getDisplayValue().trim();
+                }
+            } else {
+                packageToSend[property] = '';
+            }
+        } catch (err) {
+            this.error('ERROR: {0}', [err], 'SI: ' + this.type + '.toObject');
+        }
+    }
+
+    return packageToSend;
+};
+
+// GlideRecord to Object List Converter
+// reference: https://community.servicenow.com/community?id=community_blog&sys_id=b96c2ea1dbd0dbc01dcaf3231f9619b9
+TheLibrary.toObjectList = function(recordsToPackage, getValue) {
+    if (gs.nil(getValue)) {
+        getValue = false;
+    }
+
+    var objectList = [];
+
+    // loop through all the records and create the object array
+    while (recordsToPackage.next()) {
+        var record = this.toObject(recordsToPackage, getValue);
+        objectList.push(record);
+    }
+
+    return objectList;
+};
+
+// Convert a GlideRecord to a JSON object
+// reference: https://community.servicenow.com/community?id=community_blog&sys_id=b96c2ea1dbd0dbc01dcaf3231f9619b9
+TheLibrary.toJSON = function(recordsToPackage) {
+    return global.JSON.parse(global.JSON.stringify(this.toObject(recordsToPackage)));
+};
+
+// toBoolean(item) – changes a True/False string or a number (1/0) into the boolean true/false.
+// reference: https://developer.servicenow.com/connect.do#!/event/creatorcon18/CCW0685
+TheLibrary.toBoolean = function(item) {
+    if (!this.has(item))
+        return false;
+
+    if (typeof item == 'boolean')
+        return item;
+
+    if (typeof item == 'number')
+        return item != 0;
+
+    if ((typeof item == 'string') || ((typeof item == 'object') && (item instanceof String))) {
+        return item.toLowerCase() == 'true';
+    }
+
+    return true;
+};
+
+// from JSUtil
+TheLibrary.has = function(item) {
+    return (item != null) && (typeof item != 'undefined');
+};
+
+// from JSUtil
+TheLibrary.doesNotHave = function(item) {
+    return !this.has(item);
+};
+
+// Retrieve record from the lookup table using the user name
+// provided from the user interface
+TheLibrary.getLookupRecord = function(name) {
+    var returned_address = 'invalid address';
+
+    var lookupRecord = new GlideRecord('x_35505_thelibrar_lookup_table');
+    if (lookupRecord.get('name', name)) {
+        returned_address = lookupRecord.getValue('address');
+        gs.info('---> made it to here Return Address = ' + returned_address);
+    }
+
+    return returned_address;
+};
+
+TheLibrary.getListOfLookupNames = function() {
+    var lookupTable = new GlideRecord('x_35505_thelibrar_lookup_table');
+    lookupTable.query();
+
+    var lookupTableNames = [];
+    while (lookupTable.next()) {
+        lookupTableNames.push(lookupTable.getValue('name'));
+    }
+
+    return lookupTableNames;
+};
+
+//*****End of Script*****]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2020-10-13 15:52:38</sys_created_on>
+        <sys_id>8932f7c22fb31010d2d1d99df699b6a2</sys_id>
+        <sys_mod_count>2</sys_mod_count>
+        <sys_name>TheLibrary</sys_name>
+        <sys_package display_value="TheLibrary" source="x_35505_thelibrar">c4a03b822fb31010d2d1d99df699b603</sys_package>
+        <sys_policy>read</sys_policy>
+        <sys_scope display_value="TheLibrary">c4a03b822fb31010d2d1d99df699b603</sys_scope>
+        <sys_update_name>sys_script_include_8932f7c22fb31010d2d1d99df699b6a2</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2020-10-14 19:44:08</sys_updated_on>
+    </sys_script_include>
+</record_update>
